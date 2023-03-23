@@ -1,54 +1,56 @@
-# Variables:
+# ------------------------------------------------------------------------------
+#         NOTICE: **This file is maintained with puppetsync**
 #
-# SIMP_GEM_SERVERS | a space/comma delimited list of rubygem servers
-# PUPPET_VERSION   | specifies the version of the puppet gem to load
-puppetversion = ENV.key?('PUPPET_VERSION') ? "#{ENV['PUPPET_VERSION']}" : '~>3'
-gem_sources   = ENV.key?('SIMP_GEM_SERVERS') ? ENV['SIMP_GEM_SERVERS'].split(/[, ]+/) : ['https://rubygems.org']
+# This file is automatically updated as part of a puppet module baseline.
+# The next baseline sync will overwrite any local changes made to this file.
+# ------------------------------------------------------------------------------
+gem_sources = ENV.fetch('GEM_SERVERS','https://rubygems.org').split(/[, ]+/)
+
+ENV['PDK_DISABLE_ANALYTICS'] ||= 'true'
 
 gem_sources.each { |gem_source| source gem_source }
 
 group :test do
-  gem "rake"
-  gem 'puppet', puppetversion
-  gem "rspec", '< 3.2.0'
-  gem "rspec-puppet"
-  gem "puppetlabs_spec_helper"
-  gem "metadata-json-lint"
-  gem "simp-rspec-puppet-facts"
-
-  # dependency hacks:
-  gem "fog-google", '~> 0.0.9' # 0.1 dropped support for ruby 1.9
-
-  # simp-rake-helpers does not suport puppet 2.7.X
-  if "#{ENV['PUPPET_VERSION']}".scan(/\d+/).first != '2' &&
-      # simp-rake-helpers and ruby 1.8.7 bomb Travis tests
-      # TODO: fix upstream deps (parallel in simp-rake-helpers)
-      RUBY_VERSION.sub(/\.\d+$/,'') != '1.8'
-    gem 'simp-rake-helpers'
-  end
+  puppet_version = ENV['PUPPET_VERSION'] || '~> 6.22'
+  major_puppet_version = puppet_version.scan(/(\d+)(?:\.|\Z)/).flatten.first.to_i
+  gem 'rake'
+  gem 'puppet', puppet_version
+  gem 'rspec'
+  gem 'rspec-puppet'
+  gem 'hiera-puppet-helper'
+  gem 'puppetlabs_spec_helper'
+  gem 'metadata-json-lint'
+  gem 'puppet-strings'
+  gem 'puppet-lint-empty_string-check',   :require => false
+  gem 'puppet-lint-trailing_comma-check', :require => false
+  gem 'simp-rspec-puppet-facts', ENV['SIMP_RSPEC_PUPPET_FACTS_VERSION'] || '~> 3.1'
+  gem 'simp-rake-helpers', ENV['SIMP_RAKE_HELPERS_VERSION'] || ['>= 5.12.1', '< 6']
+  gem( 'pdk', ENV['PDK_VERSION'] || '~> 2.0', :require => false) if major_puppet_version > 5
+  gem 'pathspec', '~> 0.2' if Gem::Requirement.create('< 2.6').satisfied_by?(Gem::Version.new(RUBY_VERSION.dup))
 end
 
 group :development do
-  gem "travis"
-  gem "travis-lint"
-  gem "vagrant-wrapper"
-  gem "puppet-blacksmith"
-  gem "guard-rake"
   gem 'pry'
+  gem 'pry-byebug'
   gem 'pry-doc'
 end
 
 group :system_tests do
   gem 'beaker'
   gem 'beaker-rspec'
+  gem 'simp-beaker-helpers', ENV['SIMP_BEAKER_HELPERS_VERSION'] || ['>= 1.28.0', '< 2']
+  gem 'bcrypt_pbkdf'
+end
 
-  # 1.0.5 introduces FIPS-first acc tests
-  # 1.0.7 introduces a pluginsync helper for custom facts
-  # 1.0.10 fixes FIPS support
-  gem 'simp-beaker-helpers', '>= 1.0.10'
-
-  # dependency hacks:
-  # NOTE: Workaround because net-ssh 2.10 is busting beaker
-  # lib/ruby/1.9.1/socket.rb:251:in `tcp': wrong number of arguments (5 for 4) (ArgumentError)
-  gem 'net-ssh', '~> 2.9.0'
+# Evaluate extra gemfiles if they exist
+extra_gemfiles = [
+  ENV['EXTRA_GEMFILE'] || '',
+  "#{__FILE__}.project",
+  "#{__FILE__}.local",
+  File.join(Dir.home, '.gemfile'),
+]
+extra_gemfiles.each do |gemfile|
+  if File.file?(gemfile) && File.readable?(gemfile)
+    eval(File.read(gemfile), binding)
+  end
 end
